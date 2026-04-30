@@ -3,37 +3,33 @@ from fastapi.responses import JSONResponse
 import requests
 from datetime import datetime
 import os
-from count_eggs import calculate_egg_counts
+from count_eggs import load_name_mappings, parse_message
 
 app = FastAPI()
 
 GROUP_ID = 27967386
 
+def get_token():
+    token = os.getenv('TOKEN')
+    if not token:
+        raise ValueError("TOKEN environment variable not set")
+    return token
+
 def get_bot_id():
-    try:
-        with open('botId.txt', 'r') as f:
-            return f.read().strip()
-    except FileNotFoundError:
-        return None
+    bot_id = os.getenv('BOT_ID')
+    if not bot_id:
+        raise ValueError("BOT_ID environment variable not set")
+    return bot_id
 
 def get_bot_user_id():
-    try:
-        with open('botUserId.txt', 'r') as f:
-            return f.read().strip()
-    except FileNotFoundError:
-        return None
+    return os.getenv('BOT_USER_ID')
 
 def send_message(text):
     try:
-        with open('token.txt', 'r') as f:
-            token = f.read().strip()
-    except FileNotFoundError:
-        print("Error: token.txt not found")
-        return False
-
-    bot_id = get_bot_id()
-    if not bot_id:
-        print("Error: botId.txt not found")
+        token = get_token()
+        bot_id = get_bot_id()
+    except ValueError as e:
+        print(f"Error: {e}")
         return False
 
     url = 'https://api.groupme.com/v3/bots/post'
@@ -45,8 +41,71 @@ def send_message(text):
     response = requests.post(url, json=payload)
     return response.status_code == 201
 
+def calculate_egg_counts_with_env(group_id):
+    try:
+        token = get_token()
+    except ValueError as e:
+        raise e
+
+    bot_user_id = get_bot_user_id()
+    name_to_primary, primary_to_display = load_name_mappings()
+
+    url = f'https://api.groupme.com/v3/groups/{group_id}/messages'
+
+    params = {
+        'token': token,
+        'limit': 100
+    }
+
+    before_id = None
+    egg_counts = {}
+    oldest_timestamp = None
+    newest_timestamp = None
+
+    while True:
+        if before_id:
+            params['before_id'] = before_id
+
+        response = requests.get(url, params=params)
+
+        if response.status_code != 200:
+            print(f"Error: {response.status_code}")
+            print(response.text)
+            break
+
+        data = response.json()
+
+        if not data.get('response') or not data['response'].get('messages'):
+            break
+
+        messages = data['response']['messages']
+
+        if not messages:
+            break
+
+        for msg in messages:
+            if bot_user_id and msg['user_id'] == bot_user_id:
+                continue
+
+            if msg['text']:
+                timestamp = msg['created_at']
+                if oldest_timestamp is None or timestamp < oldest_timestamp:
+                    oldest_timestamp = timestamp
+                if newest_timestamp is None or timestamp > newest_timestamp:
+                    newest_timestamp = timestamp
+                parse_message(msg['text'], egg_counts, name_to_primary)
+
+        before_id = messages[-1]['id']
+
+    return {
+        'egg_counts': egg_counts,
+        'primary_to_display': primary_to_display,
+        'oldest_timestamp': oldest_timestamp,
+        'newest_timestamp': newest_timestamp
+    }
+
 def format_egg_counts():
-    result = calculate_egg_counts(GROUP_ID)
+    result = calculate_egg_counts_with_env(GROUP_ID)
     egg_counts = result['egg_counts']
     primary_to_display = result['primary_to_display']
     oldest_timestamp = result['oldest_timestamp']
