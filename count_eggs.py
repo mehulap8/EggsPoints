@@ -104,13 +104,6 @@ def display_egg_counts(group_id):
     result = calculate_egg_counts(group_id)
     egg_counts = result['egg_counts']
     primary_to_display = result['primary_to_display']
-    oldest_timestamp = result['oldest_timestamp']
-    newest_timestamp = result['newest_timestamp']
-
-    if oldest_timestamp is not None:
-        print(f"Oldest message: {datetime.utcfromtimestamp(oldest_timestamp).strftime('%Y-%m-%d %H:%M:%S UTC')}")
-        print(f"Newest message: {datetime.utcfromtimestamp(newest_timestamp).strftime('%Y-%m-%d %H:%M:%S UTC')}")
-        print()
 
     print("Egg Counts:")
     sorted_eggs = sorted(egg_counts.items(), key=lambda x: x[1], reverse=True)

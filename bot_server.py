@@ -1,9 +1,21 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import requests
-from datetime import datetime
 import os
+import re
 from count_eggs import load_name_mappings, parse_message
+from database import init_db, update_count, get_all_counts
+
+app = FastAPI()
+
+GROUP_ID = 27967386
+
+@app.on_event("startup")
+async def startup_event():
+    try:
+        init_db()
+    except Exception as e:
+        print(f"Warning: Could not initialize database on startup: {e}")
 
 app = FastAPI()
 
@@ -41,85 +53,38 @@ def send_message(text):
     response = requests.post(url, json=payload)
     return response.status_code == 201
 
-def calculate_egg_counts_with_env(group_id):
-    try:
-        token = get_token()
-    except ValueError as e:
-        raise e
+def process_message_for_counts(text):
+    """Extract ++ and -- patterns and update database"""
+    name_to_primary, _ = load_name_mappings()
 
-    bot_user_id = get_bot_user_id()
-    name_to_primary, primary_to_display = load_name_mappings()
+    pattern = r'(\w+(?:\s+\w+)*)\s*(\+\+|--)'
+    matches = re.findall(pattern, text)
 
-    url = f'https://api.groupme.com/v3/groups/{group_id}/messages'
+    for names_str, operator in matches:
+        names = [n.lower() for n in names_str.split()]
+        delta = 1 if operator == '++' else -1
 
-    params = {
-        'token': token,
-        'limit': 100
-    }
-
-    before_id = None
-    egg_counts = {}
-    oldest_timestamp = None
-    newest_timestamp = None
-
-    while True:
-        if before_id:
-            params['before_id'] = before_id
-
-        response = requests.get(url, params=params)
-
-        if response.status_code != 200:
-            print(f"Error: {response.status_code}")
-            print(response.text)
-            break
-
-        data = response.json()
-
-        if not data.get('response') or not data['response'].get('messages'):
-            break
-
-        messages = data['response']['messages']
-
-        if not messages:
-            break
-
-        for msg in messages:
-            if bot_user_id and msg['user_id'] == bot_user_id:
-                continue
-
-            if msg['text']:
-                timestamp = msg['created_at']
-                if oldest_timestamp is None or timestamp < oldest_timestamp:
-                    oldest_timestamp = timestamp
-                if newest_timestamp is None or timestamp > newest_timestamp:
-                    newest_timestamp = timestamp
-                parse_message(msg['text'], egg_counts, name_to_primary)
-
-        before_id = messages[-1]['id']
-
-    return {
-        'egg_counts': egg_counts,
-        'primary_to_display': primary_to_display,
-        'oldest_timestamp': oldest_timestamp,
-        'newest_timestamp': newest_timestamp
-    }
+        for name in names:
+            if name in name_to_primary:
+                primary_name = name_to_primary[name]
+                try:
+                    update_count(primary_name, delta)
+                except Exception as e:
+                    print(f"Error updating count for {primary_name}: {e}")
 
 def format_egg_counts():
-    result = calculate_egg_counts_with_env(GROUP_ID)
-    egg_counts = result['egg_counts']
-    primary_to_display = result['primary_to_display']
-    oldest_timestamp = result['oldest_timestamp']
-    newest_timestamp = result['newest_timestamp']
+    name_to_primary, primary_to_display = load_name_mappings()
+
+    try:
+        egg_counts = get_all_counts()
+    except Exception as e:
+        print(f"Error fetching counts from database: {e}")
+        return f"Error: Could not fetch egg counts ({str(e)})"
+
+    if not egg_counts:
+        return "No egg counts yet!"
 
     lines = []
-
-    if oldest_timestamp is not None:
-        oldest = datetime.utcfromtimestamp(oldest_timestamp).strftime('%Y-%m-%d %H:%M:%S UTC')
-        newest = datetime.utcfromtimestamp(newest_timestamp).strftime('%Y-%m-%d %H:%M:%S UTC')
-        lines.append(f"Oldest: {oldest}")
-        lines.append(f"Newest: {newest}")
-        lines.append("")
-
     sorted_eggs = sorted(egg_counts.items(), key=lambda x: x[1], reverse=True)
     for primary_name, count in sorted_eggs:
         display_name = primary_to_display.get(primary_name, primary_name)
@@ -142,6 +107,10 @@ async def webhook(request: Request):
 
     if bot_user_id and user_id == bot_user_id:
         return JSONResponse({"ok": True})
+
+    text = data.get('text', '')
+    if text:
+        process_message_for_counts(text)
 
     if 'list eggs' in message:
         try:
