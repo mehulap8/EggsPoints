@@ -1,12 +1,12 @@
 import os
-import psycopg2
-from psycopg2.extras import execute_values
+import psycopg
+from psycopg import sql
 
 def get_db_connection():
     database_url = os.getenv('DATABASE_URL')
     if not database_url:
         raise ValueError("DATABASE_URL environment variable not set")
-    return psycopg2.connect(database_url)
+    return psycopg.connect(database_url)
 
 def init_db():
     conn = get_db_connection()
@@ -69,12 +69,12 @@ def bulk_insert_counts(counts_dict):
 
     data = [(name, count) for name, count in counts_dict.items()]
 
-    execute_values(
-        cur,
-        'INSERT INTO egg_counts (name, count) VALUES %s',
+    cur.executemany(
+        'INSERT INTO egg_counts (name, count) VALUES (%s, %s)',
         data
     )
 
     conn.commit()
     cur.close()
     conn.close()
+
