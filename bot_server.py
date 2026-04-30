@@ -89,7 +89,8 @@ def format_egg_counts():
     for primary_name, count in sorted_eggs:
         display_name = primary_to_display.get(primary_name, primary_name)
         eggs = '🥚' * (count // 50)
-        lines.append(f"{display_name}:{eggs} {count}")
+        elipse = '.' * (10 - len(display_name))
+        lines.append(f"{display_name}{elipse}{eggs} {count}")
 
     return '\n'.join(lines)
 
