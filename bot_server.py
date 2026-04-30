@@ -112,7 +112,7 @@ async def webhook(request: Request):
     if text:
         process_message_for_counts(text)
 
-    if 'list eggs' in message:
+    if 'list eggs' in message.lower():
         try:
             egg_list = format_egg_counts()
             send_message(egg_list)
