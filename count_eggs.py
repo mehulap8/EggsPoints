@@ -1,5 +1,5 @@
 import re
-from datetime import datetime
+import os
 import requests
 
 def load_name_mappings():
@@ -35,8 +35,10 @@ def parse_message(text, egg_counts, name_to_primary):
                 egg_counts[primary_name] = egg_counts.get(primary_name, 0) + delta
 
 def calculate_egg_counts(group_id):
-    with open('token.txt', 'r') as f:
-        token = f.read().strip()
+    token = os.getenv('TOKEN')
+    if not token:
+        with open('token.txt', 'r') as f:
+            token = f.read().strip()
 
     try:
         with open('botUserId.txt', 'r') as f:

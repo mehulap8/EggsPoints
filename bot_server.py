@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 import requests
 import os
 import re
-from count_eggs import load_name_mappings, parse_message
+from count_eggs import load_name_mappings
 from database import init_db, update_count, get_all_counts
 
 app = FastAPI()
@@ -16,10 +16,6 @@ async def startup_event():
         init_db()
     except Exception as e:
         print(f"Warning: Could not initialize database on startup: {e}")
-
-app = FastAPI()
-
-GROUP_ID = 27967386
 
 def get_token():
     token = os.getenv('TOKEN')
@@ -54,7 +50,6 @@ def send_message(text):
     return response.status_code == 201
 
 def process_message_for_counts(text):
-    """Extract ++ and -- patterns and update database"""
     name_to_primary, _ = load_name_mappings()
 
     pattern = r'(\w+(?:\s+\w+)*)\s*(\+\+|--)'
@@ -102,18 +97,17 @@ async def webhook(request: Request):
         print(f"Error parsing request: {e}")
         return JSONResponse({"ok": False}, status_code=400)
 
-    message = data.get('text', '').lower()
+    text = data.get('text', '')
     user_id = data.get('user_id')
     bot_user_id = get_bot_user_id()
 
     if bot_user_id and user_id == bot_user_id:
         return JSONResponse({"ok": True})
 
-    text = data.get('text', '')
     if text:
         process_message_for_counts(text)
 
-    if 'list eggs' in message.lower():
+    if 'list eggs' in text.lower():
         try:
             egg_list = format_egg_counts()
             send_message(egg_list)
