@@ -1,12 +1,7 @@
 #!/usr/bin/env python3
-"""
-Backfill database with egg counts from message history.
-Run this once after deploying the database setup.
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-Usage: python backfill_db.py
-"""
-
-import os
 from count_eggs import calculate_egg_counts, load_name_mappings
 from database import init_db, reset_all, bulk_insert_counts
 
